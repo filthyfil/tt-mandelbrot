@@ -113,13 +113,17 @@ module tt_um_filthyfil_mandelbrot (
     wire [8:0] mag2 = x2 + y2;
     wire escape_now = x_big | y_big | (mag2 > 9'd256); // |z|^2 > 4
 
-    // z' = (x^2 - y^2 + cr) + i(2xy + ci); 2xy enters as one add or subtract
-    wire signed [11:0] xw = $signed({4'b0, x2}) - $signed({4'b0, y2}) + cr;
-    wire signed [11:0] yw = xy_neg ? ci - $signed({3'b0, two_xy})
-                                   : ci + $signed({3'b0, two_xy});
+    // z' = (x^2 - y^2 + cr) + i(2xy + ci); 2xy enters as one add or subtract.
+    // 10 bits are enough whenever the overflow test matters (escape_now = 0):
+    // then |x^2 - y^2|, |2xy| <= 4.0 (256), and with cr in [-208, 188],
+    // ci in [-140, 120] both results stay within [-512, 511] (checked
+    // exhaustively over all x, y).
+    wire signed [9:0] xw = $signed({2'b0, x2}) - $signed({2'b0, y2}) + cr;
+    wire signed [9:0] yw = xy_neg ? ci - $signed({1'b0, two_xy})
+                                  : ci + $signed({1'b0, two_xy});
 
     // outside [-4, 4): |z'| >= 4, escaped
-    wire overflow = (xw[11:8] != {4{xw[8]}}) | (yw[11:8] != {4{yw[8]}});
+    wire overflow = (xw[9] ^ xw[8]) | (yw[9] ^ yw[8]);
 
     // The escape test is the end of the longest path, so its two flags are
     // registered and folded into esc/n one clock later: a flag from iteration
