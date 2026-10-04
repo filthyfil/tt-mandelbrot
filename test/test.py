@@ -86,4 +86,19 @@ async def test_project(dut):
         advanced = (phases[-1] - start) % 16
         assert advanced == 2, f"speed 1: phase advanced {advanced} over 4 frames, expected 2"
 
+    # palette select (ui_in[5:4]), paused so the phase must stay put
+    sels = [1, 2, 3] if not GATE_LEVEL else [2]
+    held = phases[-1]
+    for sel in sels:
+        dut.ui_in.value = (sel << 4) | 0b1000
+        i = len(phases)
+        img = await capture(dut, i)
+        ref = model.frame(grid, model.palette(sel), held)
+        if img != ref:
+            bad = [k for k in range(len(img)) if img[k] != ref[k]]
+            raise AssertionError(f"frame{i}: palette {sel} at phase {held} differs in {len(bad)} pixels, "
+                                 f"first at ({bad[0] % 640},{bad[0] // 640}): got {img[bad[0]]}, expected {ref[bad[0]]}")
+        dut._log.info(f"frame{i}: matches model with palette {sel} at phase {held}")
+        phases.append(held)
+
     dut._log.info(f"phase sequence {phases}")

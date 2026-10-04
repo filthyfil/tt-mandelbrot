@@ -27,8 +27,8 @@ pinout:
   ui[1]: "speed[1]"
   ui[2]: "reverse"
   ui[3]: "pause"
-  ui[4]: ""
-  ui[5]: ""
+  ui[4]: "palette[0]"
+  ui[5]: "palette[1]"
   ui[6]: ""
   ui[7]: ""
 

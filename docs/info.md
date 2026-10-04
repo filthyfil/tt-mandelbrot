@@ -33,6 +33,13 @@ are black. A frame counter advances `phase`, so the bands flow outward or
 inward. The palette is a closed loop with no black entry (navy → white →
 yellow → orange → maroon → purple), so a band never merges with the set.
 
+**Palettes.** `ui[5:4]` selects one of four 16-colour palettes, latched once
+per frame so a change never tears the picture. Closed-loop palettes (current,
+rainbow, synthwave) make the bands flow; the fire palette ramps dark → white →
+dark, so its bands pulse.
+
+![Palettes](palettes.gif)
+
 ## How to test
 
 1. Plug a [TinyVGA PMOD](https://github.com/mole99/tiny-vga) into the output
@@ -46,6 +53,7 @@ yellow → orange → maroon → purple), so a band never merges with the set.
 | `ui[1:0]` | cycle speed: the colours step every 1, 2, 4 or 8 frames |
 | `ui[2]` | direction: 0 = forward, 1 = reverse |
 | `ui[3]` | pause |
+| `ui[5:4]` | palette: 0 = current, 1 = rainbow, 2 = fire, 3 = synthwave |
 
 The cocotb test (`test/`) captures complete frames from the VGA pins. It
 checks every pixel against a bit-level model (`test/model.py`), and checks

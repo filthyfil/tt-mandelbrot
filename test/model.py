@@ -8,7 +8,7 @@ Written from the spec (docs/info.md), independently of the RTL:
   * x^2, y^2 truncated (>> 6); 2xy = sign(x*y) * ((|x|*|y|) >> 5)
   * escape at iteration n if |x| >= 2, |y| >= 2 or x^2 + y^2 > 4;
     an update leaving [-4, 4) escapes at n + 1
-  * colour = palette[(n + phase) mod 16], inside the set black
+  * colour = palette[sel][(n + phase) mod 16], sel = ui_in[5:4], inside black
 """
 import os
 import re
@@ -51,17 +51,21 @@ def blocks():
             for row in range(ROWS)]
 
 
-def palette():
-    """The 16 (r, g, b) 2-bit entries, read from the RTL case table."""
+def palettes():
+    """The 4 palettes of 16 (r, g, b) 2-bit entries, read from the RTL case table."""
     with open(SRC) as fh:
         text = fh.read()
-    pal = {int(i): v.replace("_", "")
-           for i, v in re.findall(r"4'd(\d+)\s*: rgb = 6'b([01_]+);", text)}
-    pal[15] = re.search(r"default: rgb = 6'b([01_]+);", text).group(1).replace("_", "")
-    assert len(pal) == 16
-    entries = [(int(v[0:2], 2), int(v[2:4], 2), int(v[4:6], 2)) for _, v in sorted(pal.items())]
+    table = {int(i): v.replace("_", "")
+             for i, v in re.findall(r"6'd(\d+)\s*: rgb = 6'b([01_]+);", text)}
+    assert sorted(table) == list(range(64)), "expected 64 palette entries"
+    entries = [(int(v[0:2], 2), int(v[2:4], 2), int(v[4:6], 2)) for _, v in sorted(table.items())]
     assert (0, 0, 0) not in entries, "a black entry would merge bands with the set"
-    return entries
+    return [entries[16 * sel:16 * sel + 16] for sel in range(4)]
+
+
+def palette(sel=0):
+    """The 16 entries of palette sel (ui_in[5:4])."""
+    return palettes()[sel]
 
 
 def frame(grid, pal, phase):

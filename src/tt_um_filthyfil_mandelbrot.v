@@ -13,12 +13,13 @@
  *   clk = 50.35 MHz (2x the 25.175 MHz VGA pixel clock)
  *   arithmetic: Q3.6 signed (9 bits, range [-4, 4)); an update that overflows
  *   counts as an escape (|z'| >= 4 implies |z| > 2)
- *   colour = palette[(n_escape + phase) mod 16], inside the set black;
+ *   colour = palette[sel][(n_escape + phase) mod 16], inside the set black;
  *   phase steps once every 1/2/4/8 frames
  *
  * ui_in[1:0] cycle speed (step every 2^s frames)
  * ui_in[2]   direction
  * ui_in[3]   pause
+ * ui_in[5:4] palette: current, rainbow, fire, synthwave (latched per frame)
  * uo_out     TinyVGA PMOD {hsync, B0, G0, R0, vsync, B1, G1, R1}
  *
  * See docs/info.md.
@@ -166,9 +167,10 @@ module tt_um_filthyfil_mandelbrot (
     // ---------------------------------------------------------
     // colour cycling
     // ---------------------------------------------------------
-    reg [3:0] ui_meta, ui_sync;
+    reg [5:0] ui_meta, ui_sync;
     reg [2:0] frame_div;
     reg [3:0] phase;
+    reg [1:0] palette; // latched at the frame tick: no tearing mid-frame
 
     wire [1:0] speed = ui_sync[1:0];
     wire reverse = ui_sync[2];
@@ -177,43 +179,100 @@ module tt_um_filthyfil_mandelbrot (
 
     always @(posedge clk) begin
         if (!rst_n) begin
-            ui_meta <= 4'd0;
-            ui_sync <= 4'd0;
+            ui_meta <= 6'd0;
+            ui_sync <= 6'd0;
             frame_div <= 3'd0;
             phase <= 4'd0;
+            palette <= 2'd0;
         end
         else begin
-            ui_meta <= ui_in[3:0];
+            ui_meta <= ui_in[5:0];
             ui_sync <= ui_meta;
             if (frame_tick) begin
                 frame_div <= frame_div + 3'd1;
+                palette <= ui_sync[5:4];
                 if (!pause && (frame_div & speed_mask) == 3'd0)
                     phase <= reverse ? phase - 4'd1 : phase + 4'd1;
             end
         end
     end
 
-    // closed loop, no black: navy - blue - white - yellow - orange - maroon - purple
+    // 4 palettes x 16 colours, selected by ui_in[5:4] (latched per frame).
+    // Every entry is non-black, so a band never merges with the inside of
+    // the set while cycling.
     wire [3:0] pal_idx = disp_n + phase; // wraps mod 16
     reg [5:0] rgb; // {R[1:0], G[1:0], B[1:0]}
     always @* begin
-        case (pal_idx)
-            4'd0 : rgb = 6'b00_00_01;
-            4'd1 : rgb = 6'b00_00_10;
-            4'd2 : rgb = 6'b00_01_10;
-            4'd3 : rgb = 6'b00_01_11;
-            4'd4 : rgb = 6'b01_10_11;
-            4'd5 : rgb = 6'b10_10_11;
-            4'd6 : rgb = 6'b10_11_11;
-            4'd7 : rgb = 6'b11_11_11;
-            4'd8 : rgb = 6'b11_11_10;
-            4'd9 : rgb = 6'b11_11_01;
-            4'd10: rgb = 6'b11_10_00;
-            4'd11: rgb = 6'b11_01_00;
-            4'd12: rgb = 6'b10_01_00;
-            4'd13: rgb = 6'b01_00_00;
-            4'd14: rgb = 6'b01_00_01;
-            default: rgb = 6'b01_00_10;
+        case ({palette, pal_idx})
+            // 0: current (navy - blue - white - yellow - orange - maroon - purple)
+            6'd0 : rgb = 6'b00_00_01;
+            6'd1 : rgb = 6'b00_00_10;
+            6'd2 : rgb = 6'b00_01_10;
+            6'd3 : rgb = 6'b00_01_11;
+            6'd4 : rgb = 6'b01_10_11;
+            6'd5 : rgb = 6'b10_10_11;
+            6'd6 : rgb = 6'b10_11_11;
+            6'd7 : rgb = 6'b11_11_11;
+            6'd8 : rgb = 6'b11_11_10;
+            6'd9 : rgb = 6'b11_11_01;
+            6'd10: rgb = 6'b11_10_00;
+            6'd11: rgb = 6'b11_01_00;
+            6'd12: rgb = 6'b10_01_00;
+            6'd13: rgb = 6'b01_00_00;
+            6'd14: rgb = 6'b01_00_01;
+            6'd15: rgb = 6'b01_00_10;
+            // 1: rainbow (hue wheel)
+            6'd16: rgb = 6'b11_00_00;
+            6'd17: rgb = 6'b11_01_00;
+            6'd18: rgb = 6'b11_10_00;
+            6'd19: rgb = 6'b11_11_00;
+            6'd20: rgb = 6'b10_11_00;
+            6'd21: rgb = 6'b01_11_00;
+            6'd22: rgb = 6'b00_11_00;
+            6'd23: rgb = 6'b00_11_01;
+            6'd24: rgb = 6'b00_11_10;
+            6'd25: rgb = 6'b00_11_11;
+            6'd26: rgb = 6'b00_10_11;
+            6'd27: rgb = 6'b00_01_11;
+            6'd28: rgb = 6'b00_00_11;
+            6'd29: rgb = 6'b01_00_11;
+            6'd30: rgb = 6'b10_00_11;
+            6'd31: rgb = 6'b11_00_10;
+            // 2: fire (dark red - yellow - white and back)
+            6'd32: rgb = 6'b01_00_00;
+            6'd33: rgb = 6'b10_00_00;
+            6'd34: rgb = 6'b11_00_00;
+            6'd35: rgb = 6'b11_01_00;
+            6'd36: rgb = 6'b11_10_00;
+            6'd37: rgb = 6'b11_11_00;
+            6'd38: rgb = 6'b11_11_01;
+            6'd39: rgb = 6'b11_11_10;
+            6'd40: rgb = 6'b11_11_11;
+            6'd41: rgb = 6'b11_11_10;
+            6'd42: rgb = 6'b11_11_01;
+            6'd43: rgb = 6'b11_10_00;
+            6'd44: rgb = 6'b11_01_00;
+            6'd45: rgb = 6'b11_00_00;
+            6'd46: rgb = 6'b10_00_00;
+            6'd47: rgb = 6'b01_00_00;
+            // 3: synthwave (magenta - pink - cyan - purple)
+            6'd48: rgb = 6'b01_00_01;
+            6'd49: rgb = 6'b10_00_10;
+            6'd50: rgb = 6'b11_00_11;
+            6'd51: rgb = 6'b11_00_10;
+            6'd52: rgb = 6'b11_01_10;
+            6'd53: rgb = 6'b11_10_11;
+            6'd54: rgb = 6'b10_10_11;
+            6'd55: rgb = 6'b01_10_11;
+            6'd56: rgb = 6'b00_10_11;
+            6'd57: rgb = 6'b00_11_11;
+            6'd58: rgb = 6'b01_11_11;
+            6'd59: rgb = 6'b10_01_11;
+            6'd60: rgb = 6'b01_00_11;
+            6'd61: rgb = 6'b01_00_10;
+            6'd62: rgb = 6'b10_00_11;
+            6'd63: rgb = 6'b10_00_01;
+            default: rgb = 6'b00_00_00; // unreachable: all 64 entries listed
         endcase
     end
 
@@ -254,6 +313,6 @@ module tt_um_filthyfil_mandelbrot (
     assign uio_out = 8'd0;
     assign uio_oe = 8'd0;
 
-    wire _unused = &{ena, uio_in, ui_in[7:4], 1'b0};
+    wire _unused = &{ena, uio_in, ui_in[7:6], 1'b0};
 
 endmodule
