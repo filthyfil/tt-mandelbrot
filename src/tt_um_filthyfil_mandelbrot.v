@@ -94,29 +94,29 @@ module tt_um_filthyfil_mandelbrot (
     reg esc; // escaped (sticky within the block)
     reg [3:0] n; // iteration of escape
 
-    // squares are only needed while |x|, |y| < 2, so square magnitudes:
-    // |x| < 128 -> 7-bit squarer, |x + y| < 256 -> 8-bit squarer
+    // products are only needed while |x|, |y| < 2, so multiply 7-bit
+    // magnitudes (|x| < 128) and apply the sign afterwards
     wire [8:0] ax = x[8] ? -x : x;
     wire [8:0] ay = y[8] ? -y : y;
-    wire signed [9:0] sum = x + y;
-    wire [9:0] as = sum[9] ? -sum : sum;
 
     wire x_big = ax[8] | ax[7]; // |x| >= 2
     wire y_big = ay[8] | ay[7];
 
     wire [13:0] x2_p = ax[6:0] * ax[6:0];
     wire [13:0] y2_p = ay[6:0] * ay[6:0];
-    wire [15:0] s_p = as[7:0] * as[7:0];
-    wire [7:0] x2 = x2_p[13:6]; // x^2       < 4.0
-    wire [7:0] y2 = y2_p[13:6]; // y^2       < 4.0
-    wire [9:0] s = s_p[15:6]; // (x+y)^2   < 16.0
+    wire [13:0] xy_p = ax[6:0] * ay[6:0];
+    wire [7:0] x2 = x2_p[13:6]; // x^2    < 4.0
+    wire [7:0] y2 = y2_p[13:6]; // y^2    < 4.0
+    wire [8:0] two_xy = xy_p[13:5]; // |2xy| < 8.0
+    wire xy_neg = x[8] ^ y[8];
 
     wire [8:0] mag2 = x2 + y2;
     wire escape_now = x_big | y_big | (mag2 > 9'd256); // |z|^2 > 4
 
-    // z' = (x^2 - y^2 + cr) + i(2xy + ci), 2xy = (x+y)^2 - x^2 - y^2
+    // z' = (x^2 - y^2 + cr) + i(2xy + ci); 2xy enters as one add or subtract
     wire signed [11:0] xw = $signed({4'b0, x2}) - $signed({4'b0, y2}) + cr;
-    wire signed [11:0] yw = $signed({2'b0, s}) - $signed({3'b0, mag2}) + ci;
+    wire signed [11:0] yw = xy_neg ? ci - $signed({3'b0, two_xy})
+                                   : ci + $signed({3'b0, two_xy});
 
     // outside [-4, 4): |z'| >= 4, escaped
     wire overflow = (xw[11:8] != {4{xw[8]}}) | (yw[11:8] != {4{yw[8]}});

@@ -5,7 +5,7 @@
 Written from the spec (docs/info.md), independently of the RTL:
   * 80x60 blocks of 8x8 pixels, c = (-3.25 + col/16) + i(1.875 - row/16)
   * Q3.6 signed fixed point (1.0 = 64), 16 iterations of z <- z^2 + c
-  * 2xy = (x+y)^2 - x^2 - y^2, squares truncated (>> 6)
+  * x^2, y^2 truncated (>> 6); 2xy = sign(x*y) * ((|x|*|y|) >> 5)
   * escape at iteration n if |x| >= 2, |y| >= 2 or x^2 + y^2 > 4;
     an update leaving [-4, 4) escapes at n + 1
   * colour = palette[(n + phase) mod 16], inside the set black
@@ -32,11 +32,13 @@ def escape_count(cr, ci):
     for n in range(ITER):
         x2 = (x * x) >> F
         y2 = (y * y) >> F
-        s = ((x + y) * (x + y)) >> F
+        two_xy = (abs(x) * abs(y)) >> (F - 1)
+        if (x < 0) != (y < 0):
+            two_xy = -two_xy
         if abs(x) >= 2 << F or abs(y) >= 2 << F or x2 + y2 > 4 << F:
             return n % 16
         xw = x2 - y2 + cr
-        yw = s - x2 - y2 + ci
+        yw = two_xy + ci
         if not (-LIM <= xw < LIM and -LIM <= yw < LIM):
             return (n + 1) % 16
         x, y = _wrap9(xw), _wrap9(yw)

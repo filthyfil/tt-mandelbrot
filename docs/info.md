@@ -20,9 +20,9 @@ c = (−3.25 + col/16) + i(1.875 − row/16).
 
 **Arithmetic.** Q3.6 signed fixed point (9 bits, range [−4, 4)):
 
-- x², y² and 2xy come from three squarers: 2xy = (x+y)² − x² − y². Squares
-  are only needed while |x|, |y| < 2, so the squarers work on 7- and 8-bit
-  magnitudes.
+- x², y² and 2xy come from three 7×7 multipliers on the magnitudes |x|, |y|.
+  Products are only needed while |x|, |y| < 2, so 7 bits suffice. The sign of
+  2xy is applied by adding or subtracting it from ci.
 - A point escapes when |x| ≥ 2, |y| ≥ 2 or x² + y² > 4. An update that
   overflows the range also counts as an escape (it implies |z| > 2), so no
   saturation logic is needed.
