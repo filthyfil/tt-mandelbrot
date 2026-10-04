@@ -121,28 +121,45 @@ module tt_um_filthyfil_mandelbrot (
     // outside [-4, 4): |z'| >= 4, escaped
     wire overflow = (xw[11:8] != {4{xw[8]}}) | (yw[11:8] != {4{yw[8]}});
 
-    wire esc_next = esc | escape_now | overflow;
-    wire [3:0] n_next = esc ? n : escape_now ? iter : iter + 4'd1;
+    // The escape test is the end of the longest path, so its two flags are
+    // registered and folded into esc/n one clock later: a flag from iteration
+    // iter-1 means n = iter-1 (escape) or n = iter (overflow). The flags of the
+    // last iteration arrive in clock 0 of the next block, where the result is
+    // handed to the display (one clock later than the block boundary; the
+    // video timing is delayed by one clock to match).
+    reg f_escape, f_overflow; // flags of the previous iteration
+
+    wire esc_final = esc | f_escape | f_overflow;
+    wire [3:0] n_final = esc ? n : f_escape ? 4'd15 : 4'd0; // overflow at 15 -> 16 mod 16
 
     reg disp_esc;
     reg [3:0] disp_n;
 
     always @(posedge clk) begin
+        f_escape <= escape_now;
+        f_overflow <= overflow;
+
+        // start each block from z = 0
         if (block_end) begin
-            // result of the block just computed goes on screen next
-            disp_esc <= esc_next;
-            disp_n <= n_next;
-            // start the next block from z = 0
             x <= 9'sd0;
             y <= 9'sd0;
-            esc <= 1'b0;
-            n <= 4'd0;
         end
         else begin
             x <= xw[8:0];
             y <= yw[8:0];
-            esc <= esc_next;
-            n <= n_next;
+        end
+
+        if (iter == 4'd0) begin
+            // flags are from iteration 15 of the previous block: hand the
+            // result to the display, then start counting for this block
+            disp_esc <= esc_final;
+            disp_n <= n_final;
+            esc <= 1'b0;
+            n <= 4'd0;
+        end
+        else if (!esc && (f_escape || f_overflow)) begin
+            esc <= 1'b1;
+            n <= f_escape ? iter - 4'd1 : iter;
         end
     end
 
@@ -206,15 +223,31 @@ module tt_um_filthyfil_mandelbrot (
     wire visible = (h < H_VISIBLE) && (v < V_VISIBLE);
     wire hsync = ~((h >= H_SYNC_START) && (h < H_SYNC_END));
     wire vsync = ~((v >= V_SYNC_START) && (v < V_SYNC_END));
-    wire [5:0] colour = (visible && disp_esc) ? rgb : 6'd0;
+
+    // delayed one clock to line up with disp_* (updated in clock 0 of a block)
+    reg visible_d, hsync_d, vsync_d;
+    always @(posedge clk) begin
+        if (!rst_n) begin
+            visible_d <= 1'b0;
+            hsync_d <= 1'b1;
+            vsync_d <= 1'b1;
+        end
+        else begin
+            visible_d <= visible;
+            hsync_d <= hsync;
+            vsync_d <= vsync;
+        end
+    end
+
+    wire [5:0] colour = (visible_d && disp_esc) ? rgb : 6'd0;
 
     reg [7:0] out_reg;
     always @(posedge clk) begin
         if (!rst_n)
             out_reg <= 8'b1000_1000; // syncs inactive (high), black
         else
-            out_reg <= {hsync, colour[0], colour[2], colour[4],
-                        vsync, colour[1], colour[3], colour[5]};
+            out_reg <= {hsync_d, colour[0], colour[2], colour[4],
+                        vsync_d, colour[1], colour[3], colour[5]};
     end
 
     assign uo_out = out_reg;
